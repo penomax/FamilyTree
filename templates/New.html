@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Graph Visualization with GraphGL</title>
+    <link rel="stylesheet" href="https://cdn.rawgit.com/graph-gl/graph-gl/master/dist/graph-gl.css">
+    <style>
+        body { margin: 0; }
+        canvas { width: 100%; height: 100vh; }
+    </style>
+</head>
+<body>
+    <canvas id="graphCanvas"></canvas>
+    <script src="https://cdn.rawgit.com/graph-gl/graph-gl/master/dist/graph-gl.js"></script>
+    <script src="https://unpkg.com/neo4j-driver/dist/neo4j-driver.js"></script>
+    <script>
+        // Set up Neo4j driver
+        const driver = neo4j.driver("bolt://localhost:7687", neo4j.auth.basic("neo4j", "password")); // Update with your credentials
+
+        // Function to fetch graph data from Neo4j
+        async function fetchGraphData() {
+            const session = driver.session();
+            try {
+                const result = await session.run(`
+                    MATCH (p1:Person)-[r:RELATED_TO]->(p2:Person)
+                    RETURN p1.name AS source, p2.name AS target, r.relation AS relation
+                `);
+
+                const nodes = new Map();
+                const edges = [];
+
+                // Process results into nodes and edges
+                result.records.forEach(record => {
+                    const source = record.get('source');
+                    const target = record.get('target');
+                    const relation = record.get('relation');
+
+                    // Add nodes to the map
+                    if (!nodes.has(source)) {
+                        nodes.set(source, { id: source, label: source });
+                    }
+                    if (!nodes.has(target)) {
+                        nodes.set(target, { id: target, label: target });
+                    }
+
+                    // Add edges
+                    edges.push({ from: source, to: target, label: relation });
+                });
+
+                return {
+                    nodes: Array.from(nodes.values()),
+                    edges: edges
+                };
+            } finally {
+                await session.close();
+            }
+        }
+
+        // Initialize GraphGL
+        async function initializeGraph() {
+            const graph = new GraphGL(document.getElementById('graphCanvas'));
+            const graphData = await fetchGraphData();
+            
+            // Set the data for GraphGL
+            graph.setData(graphData.nodes, graphData.edges);
+            graph.render();
+
+            // Enable dragging for nodes
+            graph.on('drag', (node) => {
+                console.log(`Dragging node: ${node.label}`);
+            });
+        }
+
+        // Call the initialize function
+        initializeGraph().catch(error => console.error(error));
+    </script>
+</body>
+</html>
